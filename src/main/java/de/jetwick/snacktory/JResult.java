@@ -18,6 +18,7 @@ package de.jetwick.snacktory;
 import java.io.Serializable;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -28,6 +29,7 @@ import java.util.List;
 public class JResult implements Serializable {
 
     private String title;
+    private String h1;
     private String url;
     private String originalUrl;
     private String canonicalUrl;
@@ -40,6 +42,8 @@ public class JResult implements Serializable {
     private String dateString;
     private Collection<String> keywords;
     private List<ImageResult> images = null;
+    private ImageResult imageH1 = null;
+    private String html;
 
     public JResult() {
     }
@@ -129,6 +133,18 @@ public class JResult implements Serializable {
         return this;
     }
 
+    public String getHtml() {
+        if (html == null)
+            return "";
+
+        return html;
+    }
+
+    public JResult setHtml(String html) {
+        this.html = html;
+        return this;
+    }
+
     public String getTitle() {
         if (title == null)
             return "";
@@ -137,6 +153,27 @@ public class JResult implements Serializable {
 
     public JResult setTitle(String title) {
         this.title = title;
+        return this;
+    }
+
+    public ImageResult getImgH1() {
+        return imageH1;
+    }
+
+    public JResult setImgH1(ImageResult imageH1) {
+        this.imageH1 = imageH1; 
+        return this;
+    }
+
+    
+    public String getH1() {
+        if (h1 == null)
+            return "";
+        return h1;
+    }
+
+    public JResult setH1(String h1) {
+        this.h1 = h1;
         return this;
     }
 
@@ -178,6 +215,25 @@ public class JResult implements Serializable {
         if (images == null)
             return Collections.emptyList();
         return images;
+    }
+    
+    /**
+     * @return image
+     */
+    public ImageResult getBestImage() {
+        if (images == null) return null;
+        
+        Iterator <ImageResult>i = images.iterator();
+        int weight = 0;
+        ImageResult ret = null;
+        while(i.hasNext()){
+        	ImageResult image = i.next();
+        	if (image.weight > weight) {
+        		weight = image.weight;
+        		ret = image;
+        	}
+        }        
+        return ret;
     }
 
     /**

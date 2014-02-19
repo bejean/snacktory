@@ -25,6 +25,10 @@ public class OutputFormatter {
     protected final int minParagraphText;
     protected final List<String> nodesToReplace;
     protected String nodesToKeepCssSelector = "p";
+    private static final int FORMAT_TEXT = 1;
+    private static final int FORMAT_HTML = 2;
+    //protected int format = 1;
+
 
     public OutputFormatter() {
         this(MIN_PARAGRAPH_TEXT, NODES_TO_REPLACE);
@@ -45,14 +49,24 @@ public class OutputFormatter {
     public void setNodesToKeepCssSelector(String nodesToKeepCssSelector) {
         this.nodesToKeepCssSelector = nodesToKeepCssSelector;
     }
+    
+    //public void setFormat(int format) {
+    //    this.format = format;
+    //}
 
     /**
      * takes an element and turns the P tags into \n\n
      */
     public String getFormattedText(Element topNode) {
+    	return getFormatted(topNode, FORMAT_TEXT);
+    }
+    public String getFormattedHtml(Element topNode) {
+    	return getFormatted(topNode, FORMAT_HTML);
+    }
+    public String getFormatted(Element topNode, int format) {
         removeNodesWithNegativeScores(topNode);
         StringBuilder sb = new StringBuilder();
-        append(topNode, sb, nodesToKeepCssSelector);
+        append(topNode, sb, nodesToKeepCssSelector, format);
         String str = SHelper.innerTrim(sb.toString());
         if (str.length() > 100)
             return str;
@@ -79,7 +93,7 @@ public class OutputFormatter {
         }
     }
 
-    protected void append(Element node, StringBuilder sb, String tagName) {
+    protected void append(Element node, StringBuilder sb, String tagName, int format) {
         // is select more costly then getElementsByTag?
         MAIN:
         for (Element e : node.select(tagName)) {
@@ -91,12 +105,20 @@ public class OutputFormatter {
                 tmpEl = tmpEl.parent();
             }
 
-            String text = node2Text(e);
-            if (text.isEmpty() || text.length() < minParagraphText || text.length() > SHelper.countLetters(text) * 2)
-                continue;
+            if (format==FORMAT_TEXT) {
+                String text = node2Text(e);
+                if (text.isEmpty() || text.length() < minParagraphText || text.length() > SHelper.countLetters(text) * 2)
+                    continue;
 
-            sb.append(text);
-            sb.append("\n\n");
+                sb.append(text);
+            	sb.append("\n\n");
+            } else {
+            	if (!"img".equals(e.tagName())) {
+            		sb.append("<" + e.tagName() + ">" + e.html() + "</" + e.tagName() + ">\n");
+            	} else {
+            		sb.append(e.outerHtml()+"\n");
+            	}
+            }
         }
     }
 

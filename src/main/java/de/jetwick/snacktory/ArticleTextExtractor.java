@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -29,6 +30,7 @@ public class ArticleTextExtractor {
     private static final Logger logger = LoggerFactory.getLogger(ArticleTextExtractor.class);
     // Interessting nodes
     private static final Pattern NODES = Pattern.compile("p|div|td|h1|h2|article|section");
+    //private static final Pattern NODES2 = Pattern.compile("h3|img");
     // Unlikely candidates
     private String unlikelyStr;
     private Pattern UNLIKELY;
@@ -101,6 +103,10 @@ public class ArticleTextExtractor {
      * although jSoup should be able to handle minor stuff.
      * @returns extracted article, all HTML tags stripped
      */
+    public JResult extractContent(Document doc) throws Exception {
+        return extractContent(new JResult(), doc, formatter);
+    }
+
     public JResult extractContent(String html) throws Exception {
         return extractContent(new JResult(), html);
     }
@@ -143,6 +149,16 @@ public class ArticleTextExtractor {
         }
 
         if (bestMatchElement != null) {
+        	
+//        	// 
+//        	List<Element> closeBestMatchElement = new ArrayList<Element> ();
+//            nodes = getNodes(doc);
+//            for (Element entry : nodes) {
+//                int currentWeight = getWeight(entry);
+//                if (currentWeight > (maxWeight*0.4))
+//                	closeBestMatchElement.add(entry);
+//            }
+
             List<ImageResult> images = new ArrayList<ImageResult>();
             Element imgEl = determineImageSource(bestMatchElement, images);
             if (imgEl != null) {
@@ -152,6 +168,11 @@ public class ArticleTextExtractor {
                 
                 res.setImages(images);
             }
+            Element h1El = determineFirstH1(bestMatchElement);
+            if (h1El!=null) res.setH1(h1El.text());
+
+            ImageResult imgH1El = determineFirstImageNearH1(bestMatchElement);
+            if (imgH1El!=null) res.setImgH1(imgH1El);
 
             // clean before grabbing text
             String text = formatter.getFormattedText(bestMatchElement);
@@ -159,6 +180,7 @@ public class ArticleTextExtractor {
             // this fails for short facebook post and probably tweets: text.length() > res.getDescription().length()
             if (text.length() > res.getTitle().length()) {
                 res.setText(text);
+                res.setHtml(formatter.getFormattedHtml(bestMatchElement));
 //                print("best element:", bestMatchElement);
             }
         }
@@ -392,6 +414,47 @@ public class ArticleTextExtractor {
         return weight;
     }
 
+    public Element determineFirstH1(Element el) {
+    	Element elCurrent = el;
+        Elements els = elCurrent.select("h1");
+        while (els.isEmpty() && elCurrent.parent()!=null) {
+        	elCurrent = elCurrent.parent();
+        	els = elCurrent.select("h1");     
+        }
+        if (els.isEmpty()) return null;
+        return els.first();
+    }
+
+    public ImageResult determineFirstImageNearH1(Element el) {
+    	Element elCurrent = el;
+        Elements els = elCurrent.select("h1");
+        while (els.isEmpty() && elCurrent.parent()!=null) {
+        	elCurrent = elCurrent.parent();
+        	els = elCurrent.select("h1");     
+        }
+        if (els.isEmpty()) return null;
+        Elements imgs = elCurrent.select("img");
+        if (imgs.isEmpty()) return null;
+        Element imgFirst = imgs.first();
+        return ImgElementToImageResult(imgFirst);
+    }
+    
+    private ImageResult ImgElementToImageResult(Element img) {
+    	String sourceUrl = img.attr("src");
+    	
+    	String w = img.attr("width");
+        int width = 0;
+        if (w!=null && !"".equals(w)) width = Integer.parseInt(w);
+        
+    	String h = img.attr("height");
+        int height = 0;
+        if (h!=null && !"".equals(h)) height = Integer.parseInt(h);
+
+        String alt = img.attr("alt");
+        String title = img.attr("title");
+    	return new ImageResult(sourceUrl, 0, title, height, width, alt, false);
+    }
+    
     public Element determineImageSource(Element el, List<ImageResult> images) {
         int maxWeight = 0;
         Element maxNode = null;
@@ -569,12 +632,50 @@ public class ArticleTextExtractor {
         Map<Element, Object> nodes = new LinkedHashMap<Element, Object>(64);
         int score = 100;
         for (Element el : doc.select("body").select("*")) {
-            if (NODES.matcher(el.tagName()).matches()) {
+        	if (NODES.matcher(el.tagName()).matches()) {
+            //if (NODES.matcher(el.tagName()).matches() || NODES2.matcher(el.tagName()).matches()) {
                 nodes.put(el, null);
                 setScore(el, score);
                 score = score / 2;
             }
         }
+        
+        
+//        // remove NODES2 not just before 
+//        Iterator<Element> it = nodes.keySet().iterator();
+//        while(it.hasNext()) {
+//        	Element el = it.next();
+//        	if (NODES2.matcher(el.tagName()).matches()) {
+//        		boolean remove = true;
+//        		if (it.hasNext()) {
+//        			Element el2 = it.next();
+//        			if (NODES.matcher(el2.tagName()).matches())
+//        				remove = false;
+//        		}
+//        		if (remove)
+//        			el.attr("remove", "1");
+//        		else
+//        			el.attr("remove", "0");
+//        	}
+//        }
+//        
+//        // remove NODES2 not inserted into NODES
+//        it = nodes.keySet().iterator();
+//        boolean inNodes = false;
+//        while(it.hasNext()) {
+//        	Element el = it.next();
+//        	if (NODES.matcher(el.tagName()).matches()) {
+//        		inNodes = true;
+//        	}
+//        	if (NODES2.matcher(el.tagName()).matches()) {
+//        		if ("1".equals(el.attr("remove"))) {
+//        			if (!inNodes) {
+//        				nodes.remove(el);
+//        			}
+//        		}
+//        	}
+//        }
+               
         return nodes.keySet();
     }
 
