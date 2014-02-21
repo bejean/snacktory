@@ -27,8 +27,6 @@ public class OutputFormatter {
     protected String nodesToKeepCssSelector = "p";
     private static final int FORMAT_TEXT = 1;
     private static final int FORMAT_HTML = 2;
-    //protected int format = 1;
-
 
     public OutputFormatter() {
         this(MIN_PARAGRAPH_TEXT, NODES_TO_REPLACE);
@@ -49,10 +47,6 @@ public class OutputFormatter {
     public void setNodesToKeepCssSelector(String nodesToKeepCssSelector) {
         this.nodesToKeepCssSelector = nodesToKeepCssSelector;
     }
-    
-    //public void setFormat(int format) {
-    //    this.format = format;
-    //}
 
     /**
      * takes an element and turns the P tags into \n\n
@@ -105,17 +99,18 @@ public class OutputFormatter {
                 tmpEl = tmpEl.parent();
             }
 
-            if (format==FORMAT_TEXT) {
-                String text = node2Text(e);
-                if (text.isEmpty() || text.length() < minParagraphText || text.length() > SHelper.countLetters(text) * 2)
-                    continue;
+            String text = node2Text(e);
+            if (text.isEmpty() || text.length() < minParagraphText || text.length() > SHelper.countLetters(text) * 2)
+                continue;
 
+            if (format==FORMAT_TEXT) {
                 sb.append(text);
             	sb.append("\n\n");
             } else {
             	if (!"img".equals(e.tagName())) {
             		sb.append("<" + e.tagName() + ">" + e.html() + "</" + e.tagName() + ">\n");
             	} else {
+            		// TODO : Keep only src, width and height attributtes
             		sb.append(e.outerHtml()+"\n");
             	}
             }
