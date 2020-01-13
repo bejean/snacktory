@@ -27,6 +27,8 @@ public class OutputFormatter {
     protected String nodesToKeepCssSelector = "p";
     private static final int FORMAT_TEXT = 1;
     private static final int FORMAT_HTML = 2;
+    public static final int FORMAT_OPTION_NO_IMG = 1;
+    private int formatOption = 0;
 
     public OutputFormatter() {
         this(MIN_PARAGRAPH_TEXT, NODES_TO_REPLACE);
@@ -49,18 +51,31 @@ public class OutputFormatter {
     }
 
     /**
+     * set elements to keep in output text
+     */
+    public void setFormatOption(int formatOption) {
+        this.formatOption = formatOption;
+    }
+
+    /**
      * takes an element and turns the P tags into \n\n
      */
     public String getFormattedText(Element topNode) {
     	return getFormatted(topNode, FORMAT_TEXT);
     }
+
+    /**
+     * takes an element and keep basic html formating (P, SPAN, ...)
+     */
     public String getFormattedHtml(Element topNode) {
     	return getFormatted(topNode, FORMAT_HTML);
     }
-    public String getFormatted(Element topNode, int format) {
-        removeNodesWithNegativeScores(topNode);
+    
+    private String getFormatted(Element topNode, int format) {
+        //Element node = removeNodesWithNegativeScores(topNode, format);
+    	removeNodesWithNegativeScores(topNode, format);
         StringBuilder sb = new StringBuilder();
-        append(topNode, sb, nodesToKeepCssSelector, format);
+        append(topNode, sb, nodesToKeepCssSelector, format, formatOption);
         String str = SHelper.innerTrim(sb.toString());
         if (str.length() > 100)
             return str;
@@ -78,40 +93,64 @@ public class OutputFormatter {
      * If there are elements inside our top node that have a negative gravity
      * score remove them
      */
-    protected void removeNodesWithNegativeScores(Element topNode) {
-        Elements gravityItems = topNode.select("*[gravityScore]");
+    protected void removeNodesWithNegativeScores(Element topNode, int format) {
+    	
+    	//Element clonedTopNode = topNode.clone();
+        //Elements gravityItems = clonedTopNode.select("*[gravityScore]");
+    	Elements gravityItems = topNode.select("*[gravityScore]");
         for (Element item : gravityItems) {
+        	//if (format == FORMAT_HTML && ("img".equals(item.tagName()) || item.select("img").size()>0)) 
+        	//	continue;
             int score = Integer.parseInt(item.attr("gravityScore"));
-            if (score < 0 || item.text().length() < minParagraphText)
+            if (score < 0 || item.text().length() < minParagraphText) {
+            	if (format == FORMAT_HTML && ("img".equals(item.tagName()) || item.select("img").size()>0)) 
+            		continue;
                 item.remove();
+            }
         }
+        //return clonedTopNode;
     }
 
-    protected void append(Element node, StringBuilder sb, String tagName, int format) {
+    protected void append(Element node, StringBuilder sb, String tagName, int format, int option) {
         // is select more costly then getElementsByTag?
+
+    	Element lastEl = null;
         MAIN:
         for (Element e : node.select(tagName)) {
             Element tmpEl = e;
             // check all elements until 'node'
             while (tmpEl != null && !tmpEl.equals(node)) {
-                if (unlikely(tmpEl))
+                if (unlikely(tmpEl)) {
+                	// if not wanted
                     continue MAIN;
+                }
                 tmpEl = tmpEl.parent();
+                if (lastEl!=null && lastEl.equals(tmpEl)) {
+                	// if already pushed due to a parent node
+                    continue MAIN;
+                }
             }
 
             String text = node2Text(e);
-            if (text.isEmpty() || text.length() < minParagraphText || text.length() > SHelper.countLetters(text) * 2)
-                continue;
+            if (format==FORMAT_TEXT || !"img".equals(e.tagName()))
+	            if (text.isEmpty() || text.length() < minParagraphText || text.length() > SHelper.countLetters(text) * 2)
+	                continue;
 
+            lastEl = e;
             if (format==FORMAT_TEXT) {
                 sb.append(text);
             	sb.append("\n\n");
             } else {
             	if (!"img".equals(e.tagName())) {
+            		if ((option & FORMAT_OPTION_NO_IMG) == FORMAT_OPTION_NO_IMG) {
+            			e.select("img").remove();
+            		}
             		sb.append("<" + e.tagName() + ">" + e.html() + "</" + e.tagName() + ">\n");
             	} else {
-            		// TODO : Keep only src, width and height attributtes
-            		sb.append(e.outerHtml()+"\n");
+            		if ((option & FORMAT_OPTION_NO_IMG) == 0) {
+	            		// TODO : Keep only src, width and height attributes
+	            		sb.append(e.outerHtml()+"\n");
+            		}
             	}
             }
         }

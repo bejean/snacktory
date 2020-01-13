@@ -10,7 +10,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -39,6 +41,11 @@ public class ArticleTextExtractor {
     // Most likely negative candidates
     private String negativeStr;
     private Pattern NEGATIVE;
+    //
+    private int boostValue;
+    private String boostStr;
+    private Pattern BOOST = null;
+
     private static final Pattern NEGATIVE_STYLE =
             Pattern.compile("hidden|display: ?none|font-size: ?small");
     private static final Set<String> IGNORED_TITLE_PARTS = new LinkedHashSet<String>() {
@@ -76,6 +83,16 @@ public class ArticleTextExtractor {
         this.positiveStr = positiveStr;
         POSITIVE = Pattern.compile(positiveStr);
         return this;
+    }
+    
+    public ArticleTextExtractor setBoost(String boostStr, int boostValue) {
+        this.boostStr = boostStr;
+        BOOST = Pattern.compile(boostStr);
+        return this;
+    }
+
+    public ArticleTextExtractor setBoost(String boostStr) {
+        return setBoost(boostStr, 100);
     }
 
     public ArticleTextExtractor addPositive(String pos) {
@@ -125,18 +142,94 @@ public class ArticleTextExtractor {
         // http://jsoup.org/cookbook/extracting-data/selector-syntax
         return extractContent(res, Jsoup.parse(html), formatter);
     }
+    
+//    protected List<Element> leafs = null;
+//    protected void findLeafs(Element elt) {
+//    	List<Element> elts = elt.children();
+//    	if (elts.size()==0) {
+//    		leafs.add(elt);
+//    		return;
+//    	}
+//		for (Element e : elts) { 
+//			findLeafs(e);
+//		}
+//    }
+//    
+//    protected int recurseScore(Element elt) {
+//    	int s = calcWeight(elt);
+//		for (Element e : elt.children()) { 
+//			s += recurseScore(e);
+//		}
+//    	return s;
+//    }
+//    
+//    protected Element findBestParent(Element body, Element elt) {
+//    	int bestScore = 0;
+//    	Element bestElt = null;
+//    	Element currentElt = elt;
+//    	int depth = 1;
+//    	while (true) {
+//    		depth*=2;
+//    		int score = recurseScore(currentElt);
+//    		
+//    		if ("article".equals(currentElt.tagName()) || "header".equals(currentElt.tagName())) {    		
+//        		score++;
+//        		score--;
+//        	}
+//        	score = score / depth;
+//        	if (currentElt.equals(body)) {
+//        		bestElt = elt;
+//    			bestElt.attr("score", String.valueOf(score));
+//    			return bestElt;        		
+//        	}
+//    		if (score>=bestScore || bestElt == null) {
+//    			bestScore = score;
+//    			bestElt = currentElt;
+//    			currentElt = currentElt.parent();
+//    		} else {
+//    			bestElt.attr("score", String.valueOf(bestScore));
+//    			return bestElt;
+//    		}
+//    	}    	
+//    }
+//    
+//    protected Element getBestMacthElement2(Document doc) {
+//    	
+//    	// find all leaf element
+//    	leafs = new ArrayList<Element>(5);
+//    	Elements bodies= doc.select("body");
+//    	findLeafs(bodies.first());
+// 
+//    	// find best parent for each leaf
+//    	int bestScore = 0;
+//    	Element bestElt = null;
+//		for (Element e : leafs) { 
+//			Element best = findBestParent(bodies.first(), e);
+//			int score = Integer.parseInt(best.attr("score"));
+//			if (score>20) {
+//				score = score;
+//			}
+//			if (score>=bestScore) {
+//				bestScore=score;
+//				bestElt = best;
+//			}
+//		}
+//    	return bestElt;    	
+//    }
 
-    public JResult extractContent(JResult res, Document doc, OutputFormatter formatter) throws Exception {
-        if (doc == null)
-            throw new NullPointerException("missing document");
-
-        res.setTitle(extractTitle(doc));
-        res.setDescription(extractDescription(doc));
-        res.setCanonicalUrl(extractCanonicalUrl(doc));
-
-        // now remove the clutter
-        prepareDocument(doc);
-
+    private boolean isHtml5(Document doc) {
+    	return (doc.select("article").size()>0);
+    }
+    
+    // TODO: turn bestMatchElement in an array
+    protected Element getBestMacthElement(JResult res, Document doc) {
+    	
+//    	if (isHtml5(doc)) {
+//    		res.setIsHtml5(true);
+//    		Element ret = getBestMacthElementHtml5(res, doc);
+//    		doc = Jsoup.parse(ret.html());
+//    	}
+    	
         // init elements
         Collection<Element> nodes = getNodes(doc);
         int maxWeight = 0;
@@ -150,8 +243,61 @@ public class ArticleTextExtractor {
                     break;
             }
         }
+        return bestMatchElement;
+    }
+    
+    protected Element getBestMacthElementHtml5(JResult res, Document doc) {
+    	
+    	if (isHtml5(doc)) {
+    		res.setIsHtml5(true);
+    		//Element ret = doc.select("article").first();
+    		
+    		Element ret = null;
+    		int maxlen = -1;
+    		Elements articles = doc.select("article");
+    		for (Element a : articles) {
+    			if (isUnlikely(a)) continue;
+    			a.select("aside").remove();
+    			if (a.text()!=null && a.text().length()>maxlen) {
+    				ret = a;
+    				maxlen = a.text().length();
+    			}
+    		}
+    		
+    		ret.select("aside").remove();
+    		return ret;
+    	}
+    	
+    	return null;
+    }
+    
+    public JResult extractContent(JResult res, Document doc, OutputFormatter formatter) throws Exception {
+        if (doc == null)
+            throw new NullPointerException("missing document");
 
-        if (bestMatchElement != null) {
+        res.setTitle(extractTitle(doc));
+        res.setDescription(extractDescription(doc));
+        res.setCanonicalUrl(extractCanonicalUrl(doc));
+
+        // now remove the clutter
+        prepareDocument(doc);
+        
+        Element bestMatchElementHtml5 = getBestMacthElementHtml5(res, doc);
+        Element bestMatchElement = null;
+        if (bestMatchElementHtml5!=null) {
+        	String text5 = formatter.getFormattedText(bestMatchElementHtml5);
+        	//bestMatchElement = bestMatchElementHtml5;
+        	bestMatchElement = getBestMacthElement(res, Jsoup.parse(bestMatchElementHtml5.html())); // trop agressif ?
+        	String text = formatter.getFormattedText(bestMatchElement);
+        	if (text.length()<(text5.length()/2)) {
+        		// Si trop aggressif, on garde la totalité du html5
+        		bestMatchElement = bestMatchElementHtml5;
+        	}
+        }
+        else
+        	bestMatchElement = getBestMacthElement(res, doc);
+
+        if (bestMatchElement!=null) {
         	
 //        	// 
 //        	List<Element> closeBestMatchElement = new ArrayList<Element> ();
@@ -164,6 +310,10 @@ public class ArticleTextExtractor {
 
             List<ImageResult> images = new ArrayList<ImageResult>();
             Element imgEl = determineImageSource(bestMatchElement, images);
+            if (imgEl == null && bestMatchElementHtml5!=null) {
+            	images = new ArrayList<ImageResult>();
+            	imgEl = determineImageSource(bestMatchElementHtml5, images);
+            }
             if (imgEl != null) {
                 res.setImageUrl(SHelper.replaceSpaces(imgEl.attr("src")));
                 // TODO remove parent container of image if it is contained in bestMatchElement
@@ -174,16 +324,29 @@ public class ArticleTextExtractor {
             Element h1El = determineFirstH1(bestMatchElement);
             if (h1El!=null) res.setH1(h1El.text());
 
-            ImageResult imgH1El = determineFirstImageNearH1(bestMatchElement);
+            ImageResult imgH1El = null;
+            List<ImageResult> imgH1ElList = null;
+            if (bestMatchElementHtml5!=null) {
+            	imgH1El = determineFirstImageNearH1(bestMatchElementHtml5);
+            	imgH1ElList = determineAllImageNearH1(bestMatchElementHtml5);
+            }
+            if (imgH1El==null) {
+            	imgH1El = determineFirstImageNearH1(bestMatchElement);
+            	imgH1ElList = determineAllImageNearH1(bestMatchElement);
+            }
             if (imgH1El!=null) res.setImgH1(imgH1El);
+            if (imgH1ElList!=null && imgH1ElList.size()>0) {
+            	res.setImgH1List(imgH1ElList);
+            }
 
             // clean before grabbing text
+            String html = formatter.getFormattedHtml(bestMatchElement);
             String text = formatter.getFormattedText(bestMatchElement);
             text = removeTitleFromText(text, res.getTitle());
             // this fails for short facebook post and probably tweets: text.length() > res.getDescription().length()
             if (text.length() > res.getTitle().length()) {
                 res.setText(text);
-                res.setHtml(formatter.getFormattedHtml(bestMatchElement));
+                res.setHtml(html);
 //                print("best element:", bestMatchElement);
             }
         }
@@ -307,7 +470,7 @@ public class ArticleTextExtractor {
 
     /**
      * Weights a child nodes of given Element. During tests some difficulties
-     * were met. For instanance, not every single document has nested paragraph
+     * were met. For instance, not every single document has nested paragraph
      * tags inside of the major article tag. Sometimes people are adding one
      * more nesting level. So, we're adding 4 points for every 100 symbols
      * contained in tag nested inside of the current weighted element, but only
@@ -322,6 +485,7 @@ public class ArticleTextExtractor {
         Element caption = null;
         List<Element> pEls = new ArrayList<Element>(5);
         for (Element child : rootEl.children()) {
+        	if (isUnlikely(child)) continue;
             String ownText = child.ownText();
             int ownTextLength = ownText.length();
             if (ownTextLength < 20)
@@ -395,25 +559,66 @@ public class ArticleTextExtractor {
         return val;
     }
 
+    
+    private boolean isUnlikely(Element e) {
+        if (UNLIKELY.matcher(e.className()).find()) {
+            return true;
+        }
+
+        if (UNLIKELY.matcher(e.id()).find()) {
+            return true;
+        }
+        
+        if (NEGATIVE.matcher(e.className()).find()) {
+            return true;
+        }
+
+        if (NEGATIVE.matcher(e.id()).find()) {
+            return true;
+        }
+        return false;
+    }
+    
     private int calcWeight(Element e) {
         int weight = 0;
-        if (POSITIVE.matcher(e.className()).find())
+        
+        if (BOOST!=null) {
+            if (BOOST.matcher(e.className()).find())
+                weight += boostValue;
+
+            if (BOOST.matcher(e.id()).find())
+                weight += boostValue;
+        }
+        
+//        if (e.id().indexOf("agenda")!=-1) {
+//            Matcher m = UNLIKELY.matcher(e.id());
+//            boolean b = m.find();
+//            weight += 0;
+//        }
+        
+        if (POSITIVE.matcher(e.className()).find()) {
             weight += 35;
+        }
 
-        if (POSITIVE.matcher(e.id()).find())
+        if (POSITIVE.matcher(e.id()).find()) {
             weight += 40;
+        }
 
-        if (UNLIKELY.matcher(e.className()).find())
+        if (UNLIKELY.matcher(e.className()).find()) {
             weight -= 20;
+        }
 
-        if (UNLIKELY.matcher(e.id()).find())
+        if (UNLIKELY.matcher(e.id()).find()) {
             weight -= 20;
-
-        if (NEGATIVE.matcher(e.className()).find())
+        }
+        
+        if (NEGATIVE.matcher(e.className()).find()) {
             weight -= 50;
+        }
 
-        if (NEGATIVE.matcher(e.id()).find())
+        if (NEGATIVE.matcher(e.id()).find()) {
             weight -= 50;
+        }
 
         String style = e.attr("style");
         if (style != null && !style.isEmpty() && NEGATIVE_STYLE.matcher(style).find())
@@ -431,31 +636,127 @@ public class ArticleTextExtractor {
         if (els.isEmpty()) return null;
         return els.first();
     }
-
-    public ImageResult determineFirstImageNearH1(Element el) {
-    	Element elCurrent = el;
-        Elements els = elCurrent.select("h1");
-        while (els.isEmpty() && elCurrent.parent()!=null) {
-        	elCurrent = elCurrent.parent();
-        	els = elCurrent.select("h1");     
-        }
-        if (els.isEmpty()) return null;
-        Elements imgs = elCurrent.select("img");
-        if (imgs.isEmpty()) return null;
-        Element imgFirst = imgs.first();
-        return ImgElementToImageResult(imgFirst);
+    
+    private boolean isImage(Element el) {
+    	if ("img".equals(el.tagName().toLowerCase()) && !el.attr("src").toLowerCase().endsWith(".gif"))
+    		return true;
+    	return false;
     }
+    
+    private boolean containsImage(Element el) {
+    	Elements elts = el.select("img");
+    	if (elts.isEmpty()) return false;
+    	for (Element e : elts) {
+    		if (isImage(e)) return true;
+    	}
+    	return false;
+    }
+ 
+
+    private ImageResult recursiveDetermineFirstImageNearH1(Element el, boolean h1Found) {
+    	
+    	Elements childs = el.children();
+    	//boolean h1Found = false;
+    	for (Element e : childs) {
+    		
+    		if ("h1".equals(e.tagName().toLowerCase())) h1Found = true;
+    		if (isImage(e) && h1Found) return ImgElementToImageResult(e);
+    		
+    		if ((!e.select("h1").isEmpty() || h1Found) && containsImage(e)) {
+    			ImageResult ir = recursiveDetermineFirstImageNearH1(e, h1Found);
+    			if (ir!=null) return ir;
+    		}
+    		
+    		if (containsImage(e) && h1Found) return recursiveDetermineFirstImageNearH1(e, h1Found);
+    		if (!e.select("h1").isEmpty()) h1Found = true;
+    	}
+    	return null;
+    }
+    
+    private boolean inImageList(List<ImageResult> imgs, String src) {
+    	
+    	if (imgs!=null && imgs.size()>0) {
+        	for (ImageResult i : imgs) {
+        		if (i.src.equals(src)) return true;
+        	}
+    	}
+    	return false;
+    }
+ 
+    private List<ImageResult> recursiveDetermineAllImageNearH1(Element el, boolean h1Found, List<ImageResult> imgs) {
+    	
+    	Elements childs = el.children();
+    	//boolean h1Found = false;
+    	for (Element e : childs) {
+    		
+    		if ("h1".equals(e.tagName().toLowerCase())) h1Found = true;
+    		if (isImage(e) && h1Found) {
+    			if (!inImageList(imgs, e.attr("src"))) {
+    				imgs.add(ImgElementToImageResult(e));
+    			}
+    		} else {
+	    		if ((!e.select("h1").isEmpty() || h1Found) && containsImage(e)) {
+	    			recursiveDetermineAllImageNearH1(e, h1Found, imgs);
+	    		}
+	    		
+	    		if (containsImage(e) && h1Found) recursiveDetermineAllImageNearH1(e, h1Found, imgs);
+	    		if (!e.select("h1").isEmpty()) h1Found = true;
+    		}
+    	}
+    	return imgs;
+    }
+ 
+	public ImageResult determineFirstImageNearH1(Element el) {
+	   
+		// search first parent h1
+		Element elCurrent = el;
+		Elements els = elCurrent.select("h1");
+		while (els.isEmpty() && elCurrent.parent()!=null) {
+			elCurrent = elCurrent.parent();
+			els = elCurrent.select("h1");     
+		}
+		if (els.isEmpty()) return null;
+  
+		return recursiveDetermineFirstImageNearH1(elCurrent, false);
+	}
+
+	
+	public List<ImageResult> determineAllImageNearH1(Element el) {
+		   
+    	List<ImageResult> imgs = new ArrayList<ImageResult>();
+
+		// search first parent h1
+		Element elCurrent = el;
+		Elements els = elCurrent.select("h1");
+		while (els.isEmpty() && elCurrent.parent()!=null) {
+			elCurrent = elCurrent.parent();
+			els = elCurrent.select("h1");     
+		}
+		if (els.isEmpty()) return null;
+  
+		return recursiveDetermineAllImageNearH1(elCurrent, false, imgs);
+	}
     
     private ImageResult ImgElementToImageResult(Element img) {
     	String sourceUrl = img.attr("src");
     	
     	String w = img.attr("width");
         int width = 0;
-        if (w!=null && !"".equals(w)) width = Integer.parseInt(w);
+        if (w!=null && !"".equals(w)) {
+        	w = w.toLowerCase().replace("px", "").replace("%", "").trim();
+        	try {
+        		width = Integer.parseInt(w);
+        	} catch (Exception e) {}
+        }
         
     	String h = img.attr("height");
         int height = 0;
-        if (h!=null && !"".equals(h)) height = Integer.parseInt(h);
+        if (h!=null && !"".equals(h)) {
+        	h = h.toLowerCase().replace("px", "").replace("%", "").trim();
+        	try {
+        		height = Integer.parseInt(h);
+    		} catch (Exception e) {}
+       }
 
         String alt = img.attr("alt");
         String title = img.attr("title");

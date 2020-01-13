@@ -43,9 +43,20 @@ public class JResult implements Serializable {
     private Collection<String> keywords;
     private List<ImageResult> images = null;
     private ImageResult imageH1 = null;
+    List<ImageResult> imageH1ElList = null;
     private String html;
+    private boolean isHtml5 = false;
 
     public JResult() {
+    }
+
+    public JResult setIsHtml5(boolean isHtml5) {
+    	this.isHtml5 = isHtml5;
+        return this;
+    }
+
+    public boolean isHtml5() {
+        return this.isHtml5;
     }
 
     public String getUrl() {
@@ -160,12 +171,20 @@ public class JResult implements Serializable {
         return imageH1;
     }
 
+    public List<ImageResult> getImgH1List() {
+        return this.imageH1ElList;
+    }
+
     public JResult setImgH1(ImageResult imageH1) {
         this.imageH1 = imageH1; 
         return this;
     }
-
     
+    public JResult setImgH1List(List<ImageResult> imageH1ElList) {
+        this.imageH1ElList = imageH1ElList; 
+        return this;
+    }
+
     public String getH1() {
         if (h1 == null)
             return "";
